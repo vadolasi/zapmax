@@ -1,0 +1,39 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./db.sqlite"
+}
+
+model Instance {
+  id        String      @id
+  createdAt DateTime    @default(now())
+  auth      AuthState[]
+  active    Boolean     @default(false)
+  chats     Chat[]
+  phone     String?
+}
+
+model AuthState {
+  id         String
+  createdAt  DateTime @default(now())
+  instance   Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  instanceId String
+  data       Bytes
+
+  @@id([id, instanceId])
+}
+
+model Chat {
+  name       String
+  id         String
+  instance   Instance @relation(fields: [instanceId], references: [id])
+  instanceId String
+
+  @@id([id, instanceId])
+}

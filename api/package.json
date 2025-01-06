@@ -1,0 +1,22 @@
+{
+  "name": "api",
+  "version": "1.0.50",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "bun run --watch src/index.ts",
+    "postinstall": "prisma generate && prisma db push"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.1.0",
+    "@whiskeysockets/baileys": "^6.7.9",
+    "comlink": "^4.4.2",
+    "elysia": "latest",
+    "link-preview-js": "^3.0.13",
+    "msgpackr": "^1.11.2"
+  },
+  "devDependencies": {
+    "bun-types": "latest",
+    "prisma": "^6.1.0"
+  },
+  "module": "src/index.js"
+}
