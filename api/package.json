@@ -4,7 +4,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "bun run --watch src/index.ts",
-    "postinstall": "prisma generate && prisma db push"
+    "postinstall": "prisma generate && prisma db push",
+    "start": "pm2 start --interpreter ~/.bun/bin/bun src/index.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.1.0",
@@ -12,7 +13,8 @@
     "comlink": "^4.4.2",
     "elysia": "latest",
     "link-preview-js": "^3.0.13",
-    "msgpackr": "^1.11.2"
+    "msgpackr": "^1.11.2",
+    "pm2": "^5.4.3"
   },
   "devDependencies": {
     "bun-types": "latest",
