@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "start": "vite preview"
+    "preview": "vite preview",
+    "start": "pm2 start bun -- preview"
   },
   "dependencies": {
     "@elysiajs/eden": "^1.2.0",
