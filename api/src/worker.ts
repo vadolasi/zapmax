@@ -1,6 +1,6 @@
 import { Boom } from "@hapi/boom"
 import NodeCache from "node-cache"
-import makeWASocket, { ButtonReplyInfo, AnyMessageContent, Browsers, delay, DisconnectReason, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, proto } from "@whiskeysockets/baileys"
+import makeWASocket, { AnyMessageContent, Browsers, delay, DisconnectReason, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, proto } from "@whiskeysockets/baileys"
 import P from "pino"
 import { parentPort } from "worker_threads";
 import * as Comlink from "comlink";
@@ -13,7 +13,7 @@ const INSTANCE_ID = process.env.INSTANCE_ID!
 
 const prisma = new PrismaClient()
 
-const logger = P({ timestamp: () => `,"time":"${new Date().toJSON()}"` }, P.destination("./wa-logs.txt"))
+const logger = P({ timestamp: () => `,"time":"${new Date().toJSON()}"` }, P.destination("./logs.log"))
 logger.level = "trace"
 
 const msgRetryCounterCache = new NodeCache()

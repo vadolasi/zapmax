@@ -41,6 +41,6 @@ yarn-error.log*
 package-lock.json
 **/*.bun
 
-baileys_auth_info_*/
-
 *.sqlite*
+
+*.log

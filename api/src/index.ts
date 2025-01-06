@@ -5,10 +5,11 @@ import { Worker } from "worker_threads";
 import * as Comlink from "comlink";
 import nodeEndpoint from "comlink/dist/esm/node-adapter";
 import { PrismaClient } from "@prisma/client";
+import { logger } from "@grotto/logysia";
 
 const prisma = new PrismaClient();
 
-const instances: Record<string, Comlink.Remote<Whatsapp>> = {};
+const instances = new Map<string, Comlink.Remote<Whatsapp>>();
 
 const savedInstances = await prisma.instance.findMany({ where: { active: true } });
 
@@ -20,19 +21,20 @@ for (const instance of savedInstances) {
 
   const whatsapp = Comlink.wrap<Whatsapp>(nodeEndpoint(worker));
 
-  instances[instance.id] = whatsapp;
+  instances.set(instance.id, whatsapp);
 
   whatsapp.start();
 }
 
 const app = new Elysia({ prefix: "/api" })
+  .use(logger())
   .group("/instances", (app) => 
     app
       .get("/", () => {
         return prisma.instance.findMany({ where: { active: true } });
       })
-      .get("/:id/chats", (req) => {
-        const instanceId = req.params.id;
+      .get("/:id/chats", ({ params }) => {
+        const instanceId = params.id;
 
         return prisma.chat.findMany({ select: { id: true, name: true }, where: { instanceId } });
       })
@@ -52,7 +54,7 @@ const app = new Elysia({ prefix: "/api" })
 
         const whatsapp = Comlink.wrap<Whatsapp>(nodeEndpoint(worker));
 
-        instances[id] = whatsapp;
+        instances.set(id, whatsapp);
 
         whatsapp.start();
 
@@ -62,7 +64,7 @@ const app = new Elysia({ prefix: "/api" })
         const instanceId = req.params.id;
         const { chatId, messages } = req.body;
 
-        const whatsapp = instances[instanceId];
+        const whatsapp = instances.get(instanceId)!;
 
         if (!whatsapp) {
           return { error: "Instance not found" };
@@ -77,11 +79,11 @@ const app = new Elysia({ prefix: "/api" })
       .delete("/:id", (req) => {
         const instanceId = req.params.id;
 
-        const whatsapp = instances[instanceId];
+        const whatsapp = instances.get(instanceId)!;
 
         whatsapp.terminate();
 
-        delete instances[instanceId];
+        instances.delete(instanceId);
 
         return { instanceId };
       })
@@ -91,11 +93,10 @@ const app = new Elysia({ prefix: "/api" })
         open: (ws) => {
           const instanceId = ws.data.params.id;
 
-          const whatsapp = instances[instanceId];
+          const whatsapp = instances.get(instanceId);
 
           if (!whatsapp) {
-            ws.close(4000, "Instance not found");
-            return;
+            return ws.close(4000, "Instance not found");
           }
 
           const qrCallback = Comlink.proxy((qr: string) => ws.send({ type: "qr", qr }));
