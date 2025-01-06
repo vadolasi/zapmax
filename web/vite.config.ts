@@ -1,10 +1,9 @@
 import { defineConfig } from "vite"
 import preact from "@preact/preset-vite"
 import path from "node:path"
-import basicSsl from "@vitejs/plugin-basic-ssl"
 
 export default defineConfig({
-  plugins: [basicSsl(), preact()],
+  plugins: [preact()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src")

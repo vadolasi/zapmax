@@ -36,7 +36,6 @@
   },
   "devDependencies": {
     "@preact/preset-vite": "^2.9.3",
-    "@vitejs/plugin-basic-ssl": "^1.2.0",
     "autoprefixer": "^10.4.20",
     "bun-types": "^1.1.42",
     "postcss": "^8.4.49",
