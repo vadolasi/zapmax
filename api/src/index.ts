@@ -108,7 +108,11 @@ const app = new Elysia({ prefix: "/api" })
           where: { id: schedulerId },
           include: {
             jobs: true,
-            instances: true
+            instances: {
+              include: {
+                Instance: true
+              }
+            }
           }
         });
       })
@@ -295,10 +299,11 @@ const app = new Elysia({ prefix: "/api" })
 
         return { count: scheduler.jobs.length };
       })
-      .post("/:id/start", async ({ params }) => {
+      .post("/:id/start", async ({ params, body }) => {
         const schedulerId = params.id;
+        const { instances: instancesIds } = body;
 
-        const scheduler = await prisma.scheduler.findUnique({
+        let scheduler = await prisma.scheduler.findUnique({
           where: { id: schedulerId },
           include: {
             jobs: {
@@ -312,6 +317,37 @@ const app = new Elysia({ prefix: "/api" })
 
         if (!scheduler) {
           return { error: "Scheduler not found" };
+        }
+
+        if (scheduler.active) {
+          return { error: "Scheduler already active" };
+        }
+
+        if (instancesIds) {
+          await prisma.$transaction([
+            prisma.scheduler_Instance.deleteMany({
+              where: {
+                schedulerId
+              }
+            }),
+            prisma.scheduler_Instance.createMany({
+              data: instancesIds.map((instanceId) => ({
+                schedulerId,
+                instanceId
+              }))
+            })]);
+
+          scheduler = (await prisma.scheduler.findUnique({
+            where: { id: schedulerId },
+            include: {
+              jobs: {
+                where: {
+                  sent: false
+                }
+              },
+              instances: true
+            }
+          }))!;
         }
 
         const jobsToRun: {
@@ -350,6 +386,7 @@ const app = new Elysia({ prefix: "/api" })
           await queue.add("send-messages",
             {
               jid: job.jid,
+              schedulerId,
               messages: scheduler.messages,
               minTimeBetweenMessages: scheduler.minTimeBetweenMessages,
               maxTimeBetweenMessages: scheduler.maxTimeBetweenMessages,
@@ -362,10 +399,21 @@ const app = new Elysia({ prefix: "/api" })
               removeOnComplete: true
             }
           );
-        }
-        ))
-      }
-      )
+        }))
+
+        await prisma.scheduler.update({
+          where: {
+            id: schedulerId
+          },
+          data: {
+            active: true
+          }
+        });
+
+        return { count: jobsToRun.length };
+      }, {
+        body: t.Object({ instances: t.Optional(t.Array(t.String())) })
+      })
   )
   .listen(3000);
 
@@ -469,11 +517,11 @@ new BullMQWorker(
                 minTimeTyping: scheduler.minTimeTyping,
                 maxTimeTyping: scheduler.maxTimeTyping
               },
-              {
-                delay: time - Date.now(),
-                jobId: job.id,
-                removeOnComplete: true
-              });
+                {
+                  delay: time - Date.now(),
+                  jobId: job.id,
+                  removeOnComplete: true
+                });
             }));
           }
         }
