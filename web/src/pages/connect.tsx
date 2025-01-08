@@ -17,8 +17,6 @@ export default function ConnectToInstance() {
 
       if (event.type === "qr") {
         setQrCode(event.qr)
-      } else if (event.type === "connected") {
-        setLocation(`~/${instanceId}`)
       } else {
         setLocation("~/")
       }

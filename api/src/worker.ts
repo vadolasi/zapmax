@@ -1,6 +1,6 @@
 import { Boom } from "@hapi/boom"
 import NodeCache from "node-cache"
-import makeWASocket, { AnyMessageContent, Browsers, delay, DisconnectReason, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, proto } from "@whiskeysockets/baileys"
+import makeWASocket, { Browsers, delay, DisconnectReason, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, jidNormalizedUser, toNumber } from "@whiskeysockets/baileys"
 import P from "pino"
 import { parentPort } from "worker_threads";
 import * as Comlink from "comlink";
@@ -8,6 +8,11 @@ import nodeEndpoint from "comlink/dist/esm/node-adapter";
 import { useAuthState } from "./auth";
 import EventEmitter from "events";
 import { PrismaClient } from "@prisma/client";
+import { Job, Queue, Worker } from "bullmq";
+
+const REDIS_URL = process.env.REDIS_URL!
+
+const queue = new Queue("zapmax", { connection: { url: REDIS_URL } })
 
 const INSTANCE_ID = process.env.INSTANCE_ID!
 
@@ -68,7 +73,7 @@ export async function start() {
     },
     msgRetryCounterCache,
     generateHighQualityLinkPreview: true,
-    browser: Browsers.macOS("Desktop"),
+    browser: Browsers.macOS("Zapmax"),
     syncFullHistory: true
   })
 
@@ -86,6 +91,7 @@ export async function start() {
           } else {
             emitter.emit("disconnected")
             await prisma.instance.update({ where: { id: INSTANCE_ID }, data: { active: false } })
+            queue.add("disconnect", { instanceId: INSTANCE_ID })
             process.exit(0)
           }
         }
@@ -121,8 +127,8 @@ export async function start() {
 
           await tx.chat.createMany({
 						data: chats
-							.filter((c) => !existingIds.includes(c.id) && c.name)
-							.map((c) => ({ id: c.id, instanceId: INSTANCE_ID, name: c.name! })),
+							.filter((chat) => !existingIds.includes(chat.id) && chat.name)
+							.map((chat) => ({ id: chat.id, instanceId: INSTANCE_ID, name: chat.name! })),
 					})
         })
       }
@@ -131,9 +137,10 @@ export async function start() {
          await prisma.$transaction(
           events["chats.upsert"]
           .filter(chat => chat.name && chat.id)
-          .map(chat => prisma.chat.update({
+          .map(chat => prisma.chat.upsert({
             where: { id_instanceId: { id: chat.id, instanceId: INSTANCE_ID } },
-            data: { name: chat.name!, id: chat.id }
+            create: { id: chat.id, name: chat.name!, instanceId: INSTANCE_ID },
+            update: { name: chat.name! }
           }))
         )
       }
@@ -154,39 +161,69 @@ export async function start() {
           where: { id: { in: events["chats.delete"] }, instanceId: INSTANCE_ID }
         })
       }
+
+      if (events["messages.upsert"]) {
+        const { type, messages } = events["messages.upsert"]
+
+        switch (type) {
+          case "notify":
+            for (const message of messages) {
+              const jid = jidNormalizedUser(message.key.remoteJid!)
+              const chat = await prisma.chat.findUnique({ where: { id_instanceId: { id: jid, instanceId: INSTANCE_ID } } })
+
+              if (!chat) {
+                sock.ev.emit("chats.upsert", [
+                  {
+                    id: jid,
+                    name: message.pushName
+                  }
+                ])
+              }
+            }
+        }
+      }
     }
   )
 }
 
-export async function sendMessage(jid: string, messages: AnyMessageContent[]) {
+export async function sendMessage(
+  jid: string,
+  messages: ({ type: "text", text: string } | { type: "media" })[],
+  minTimeBetweenMessages = 5000,
+  maxTimeBetweenMessages = 10000,
+  minTimeTyping = 1000,
+  maxTimeTyping = 5000
+) {
   await sock.presenceSubscribe(jid)
+  await delay(Math.random() * 1000)
 
+  let i = 0;
   for (const message of messages) {
-    await delay(Math.random() * 1000)
+    if (i > 0) {
+      await delay(Math.random() * (maxTimeBetweenMessages - minTimeBetweenMessages) + minTimeBetweenMessages)
+    }
     await sock.sendPresenceUpdate("composing", jid)
-    await delay(Math.random() * 5000)
+    await delay(Math.random() * (maxTimeTyping - minTimeTyping) + minTimeTyping)
     await sock.sendPresenceUpdate("paused", jid)
-    sock.sendMessage(jid, message)
+    switch (message.type) {
+      case "text":
+        await sock.sendMessage(jid, { text: message.text })
+        break
+    }
+    i++
   }
 }
 
-export async function massiveSendToCommunity(jid: string, messages: AnyMessageContent[]) {
+export async function fetchCommunityParticipants(jid: string) {
   const chats = await sock.groupFetchAllParticipating()
 
   const chat = chats[jid]
 
   if (!chat) {
-    return
+    return []
   }
 
-  const firstParticipant = chat.participants[0]
-
-  await sendMessage(firstParticipant.id, messages)
-
-  for (const participant of chat.participants.slice(1)) {
-    await delay(Math.random() * 10000 + 20000)
-    await sendMessage(participant.id, messages)
-  }
+  return chat.participants
 }
 
 export async function terminate() {
@@ -200,7 +237,7 @@ const methods = {
   once,
   start,
   sendMessage,
-  massiveSendToCommunity,
+  fetchCommunityParticipants,
   terminate
 }
 
@@ -209,3 +246,44 @@ type Whatsapp = typeof methods
 export default Whatsapp
 
 Comlink.expose(methods, nodeEndpoint(parentPort!));
+
+new Worker(
+  `zapmax-${INSTANCE_ID}`,
+  async (job: Job<{
+    jid: string,
+    messages: any[],
+    schedulerId: string,
+    minTimeBetweenMessages: number,
+    maxTimeBetweenMessages: number,
+    minTimeTyping: number,
+    maxTimeTyping: number
+  }>) => {
+    if (job.name === "send-messages") {
+      const {
+        jid,
+        messages,
+        schedulerId,
+        minTimeBetweenMessages,
+        maxTimeBetweenMessages,
+        minTimeTyping,
+        maxTimeTyping
+      } = job.data
+
+      /*
+      await sendMessage(
+        jid,
+        messages,
+        minTimeBetweenMessages,
+        maxTimeBetweenMessages,
+        minTimeTyping,
+        maxTimeTyping
+      )
+        */
+      await prisma.job.update({
+        where: { jid_schedulerId: { jid, schedulerId } },
+        data: { sent: true }
+      })
+    }
+  },
+  { connection: { url: REDIS_URL } }
+)

@@ -1,27 +1,24 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./db.sqlite"
+  provider = "postgresql"
+  url      = env("DB_URL")
 }
 
 model Instance {
-  id        String      @id
-  createdAt DateTime    @default(now())
-  auth      AuthState[]
-  active    Boolean     @default(false)
+  id        String               @id
+  createdAt DateTime             @default(now())
+  session   Session[]
+  active    Boolean              @default(false)
   chats     Chat[]
   phone     String?
+  shadulers Scheduler_Instance[]
 }
 
-model AuthState {
+model Session {
   id         String
-  createdAt  DateTime @default(now())
   instance   Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
   instanceId String
   data       Bytes
@@ -30,10 +27,47 @@ model AuthState {
 }
 
 model Chat {
-  name       String
-  id         String
-  instance   Instance @relation(fields: [instanceId], references: [id])
-  instanceId String
+  name         String
+  id           String
+  instance     Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  instanceId   String
+  participants Json     @default("[]") @db.Json
 
   @@id([id, instanceId])
+}
+
+model Scheduler_Instance {
+  Instance    Instance?  @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  instanceId  String
+  Scheduler   Scheduler? @relation(fields: [schedulerId], references: [id], onDelete: Cascade)
+  schedulerId String
+
+  @@id([instanceId, schedulerId])
+}
+
+model Scheduler {
+  id                         String               @id
+  jid                        String
+  createdAt                  DateTime             @default(now())
+  instances                  Scheduler_Instance[]
+  blockAdms                  Boolean              @default(true)
+  active                     Boolean              @default(true)
+  messages                   Json                 @db.Json
+  minTimeBetweenParticipants Int
+  maxTimeBetweenParticipants Int
+  minTimeBetweenMessages     Int
+  maxTimeBetweenMessages     Int
+  minTimeTyping              Int
+  maxTimeTyping              Int
+  jobs                       Job[]
+}
+
+model Job {
+  jid         String
+  scheduler   Scheduler @relation(fields: [schedulerId], references: [id], onDelete: Cascade)
+  schedulerId String
+  sent        Boolean   @default(false)
+  queueId     String
+
+  @@id([jid, schedulerId])
 }

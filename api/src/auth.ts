@@ -1,15 +1,18 @@
 import { proto, AuthenticationCreds, AuthenticationState, SignalDataTypeMap, initAuthCreds, BufferJSON } from "@whiskeysockets/baileys"
 import { PrismaClient } from "@prisma/client"
-import { Packr } from "msgpackr"
+import { Packr } from "msgpackr";
 
-const packr = new Packr()
+const packr = new Packr();
 
 const prisma = new PrismaClient()
 
+const fixId = (id: string) => id.replace(/\//g, "__").replace(/:/g, "-");
+
 export const useAuthState = async(instanceId: string): Promise<{ state: AuthenticationState, saveCreds: () => Promise<void> }> => {
 	const writeData = async (data: any, id: string) => {
-    const dataToSave = new Uint8Array(packr.pack(data))
-    await prisma.authState.upsert({
+    id = fixId(id);
+    data = new Uint8Array(packr.pack(data));
+    await prisma.session.upsert({
       where: {
         id_instanceId: {
           id,
@@ -19,34 +22,39 @@ export const useAuthState = async(instanceId: string): Promise<{ state: Authenti
       create: {
         id,
         instanceId,
-        data: dataToSave
+        data
       },
       update: {
-        data: dataToSave
+        data
       }
     })
 	}
 
 	const readData = async (id: string) => {
-		const data = await prisma.authState.findFirst({
+		const data = await prisma.session.findUnique({
+      select: { data: true },
       where: {
-        instanceId,
-        id
+        id_instanceId: {
+          instanceId,
+          id: fixId(id)
+        }
       }
     })
 
     if (data) {
-      return packr.unpack(Buffer.from(data.data))
-    } else {
-      return null
+      return packr.unpack(Buffer.from(data.data));
     }
+
+    return null;
 	}
 
 	const removeData = async(id: string) => {
-		await prisma.authState.deleteMany({
+		await prisma.session.delete({
       where: {
-        instanceId,
-        id
+        id_instanceId: {
+          instanceId,
+          id: fixId(id)
+        }
       }
     })
 	}
