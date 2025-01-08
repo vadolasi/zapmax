@@ -269,7 +269,6 @@ new Worker(
         maxTimeTyping
       } = job.data
 
-      /*
       await sendMessage(
         jid,
         messages,
@@ -278,7 +277,6 @@ new Worker(
         minTimeTyping,
         maxTimeTyping
       )
-        */
       await prisma.job.update({
         where: { jid_schedulerId: { jid, schedulerId } },
         data: { sent: true }
