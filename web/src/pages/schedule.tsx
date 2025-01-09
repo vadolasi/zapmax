@@ -2,7 +2,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import httpClient from "@/lib/httpClient";
-import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useSuspenseQueries, useSuspenseQuery } from "@tanstack/react-query";
 import { AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useParams } from "wouter-preact";
@@ -22,10 +22,16 @@ export default function Schedule() {
   const params = useParams()
   const scheduleId = params.id as string
 
-  const { data: { data: schedule } } = useSuspenseQuery({
-    queryKey: ["schedule", scheduleId],
-    queryFn: () => httpClient.api.schedulers({ id: scheduleId }).get(),
-    refetchInterval: 5000
+  const [{ data: { data: schedule } }, { data: { data: instances } }] = useSuspenseQueries({
+    queries: [{
+      queryKey: ["schedule", scheduleId],
+      queryFn: () => httpClient.api.schedulers({ id: scheduleId }).get(),
+      refetchInterval: 5000
+    }, {
+      queryKey: ["instances"],
+      queryFn: () => httpClient.api.instances.index.get(),
+      refetchInterval: 5000
+    }]
   })
 
   const form = useForm<FormData>({
@@ -70,7 +76,7 @@ export default function Schedule() {
     })
   }
 
-  if (!schedule) return null
+  if (!schedule || !instances) return null
 
   const totalJobs = schedule.jobs.length
   const totalSentJobs = schedule.jobs.filter(job => job.sent).length
@@ -105,7 +111,7 @@ export default function Schedule() {
                   <FormLabel>Instâncias para envio</FormLabel>
                   <FormControl>
                     <MultiSelect
-                      options={schedule.instances.map(({ Instance }) => ({ label: Instance!.phone || Instance!.id, value: Instance!.id }))}
+                      options={instances.map(({ id, phone }) => ({ label: phone || id, value: id }))}
                       onValueChange={field.onChange}
                       defaultValue={field.value}
                     />
