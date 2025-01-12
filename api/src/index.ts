@@ -310,7 +310,15 @@ const app = new Elysia({ prefix: "/api" })
       })
       .post("/:id/start", async ({ params, body }) => {
         const schedulerId = params.id;
-        const { instances: instancesIds } = body;
+        const {
+          instances: instancesIds,
+          minTimeBetweenParticipants,
+          maxTimeBetweenParticipants,
+          minTimeBetweenMessages,
+          maxTimeBetweenMessages,
+          minTimeTyping,
+          maxTimeTyping
+        } = body;
 
         let scheduler = await prisma.scheduler.findUnique({
           where: { id: schedulerId },
@@ -397,10 +405,10 @@ const app = new Elysia({ prefix: "/api" })
               jid: job.jid,
               schedulerId,
               messages: scheduler.messages,
-              minTimeBetweenMessages: scheduler.minTimeBetweenMessages,
-              maxTimeBetweenMessages: scheduler.maxTimeBetweenMessages,
-              minTimeTyping: scheduler.minTimeTyping,
-              maxTimeTyping: scheduler.maxTimeTyping
+              minTimeBetweenMessages: minTimeBetweenMessages,
+              maxTimeBetweenMessages: maxTimeBetweenMessages,
+              minTimeTyping: minTimeTyping,
+              maxTimeTyping: maxTimeTyping
             },
             {
               delay: currentTime - Date.now(),
@@ -421,7 +429,15 @@ const app = new Elysia({ prefix: "/api" })
 
         return { count: jobsToRun.length };
       }, {
-        body: t.Object({ instances: t.Optional(t.Array(t.String())) })
+        body: t.Object({
+          instances: t.Array(t.String()),
+          minTimeBetweenParticipants: t.Number({ minimum: 1 }),
+          maxTimeBetweenParticipants: t.Number({ minimum: 1 }),
+          minTimeBetweenMessages: t.Number({ minimum: 1 }),
+          maxTimeBetweenMessages: t.Number({ minimum: 1 }),
+          minTimeTyping: t.Number({ minimum: 1 }),
+          maxTimeTyping: t.Number({ minimum: 1 }),
+        })
       })
   )
   .post("/upload", async ({ body }) => {

@@ -11,9 +11,16 @@ import { useForm } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { MultiSelect } from "@/components/ui/multi-select";
+import { Input } from "@/components/ui/input";
 
 const schema = v.object({
   instances: v.array(v.string()),
+  minTimeBetweenParticipants: v.pipe(v.number(), v.minValue(1)),
+  maxTimeBetweenParticipants: v.pipe(v.number(), v.minValue(1)),
+  minTimeBetweenMessages: v.pipe(v.number(), v.minValue(1)),
+  maxTimeBetweenMessages: v.pipe(v.number(), v.minValue(1)),
+  minTimeTyping: v.pipe(v.number(), v.minValue(1)),
+  maxTimeTyping: v.pipe(v.number(), v.minValue(1)),
 })
 
 type FormData = NonNullable<v.InferInput<typeof schema>>
@@ -38,7 +45,13 @@ export default function Schedule() {
     resolver: valibotResolver(schema),
     mode: "onBlur",
     defaultValues: {
-      instances: schedule?.instances.map(({ Instance }) => Instance!.id) || []
+      instances: schedule?.instances.map(({ Instance }) => Instance!.id) || [],
+      minTimeBetweenParticipants: schedule?.minTimeBetweenParticipants || 20,
+      maxTimeBetweenParticipants: schedule?.maxTimeBetweenParticipants || 40,
+      minTimeBetweenMessages: schedule?.minTimeBetweenMessages || 5,
+      maxTimeBetweenMessages: schedule?.maxTimeBetweenMessages || 10,
+      minTimeTyping: schedule?.minTimeTyping || 1,
+      maxTimeTyping: schedule?.maxTimeTyping || 3,
     }
   })
 
@@ -48,6 +61,7 @@ export default function Schedule() {
 
   const { mutateAsync: start } = useMutation({
     mutationFn: (data: FormData) => httpClient.api.schedulers({ id: scheduleId }).start.post({
+      ...data,
       instances: data.instances
     }),
   })
@@ -99,7 +113,10 @@ export default function Schedule() {
         <Progress value={(totalSentJobs / totalJobs) * 100} />
       </div>
       {schedule.active ? (
-        <Button onClick={stopSchedule}>Pausar</Button>
+        <>
+          <span class="text-sm font-semibold">Instâncias: {schedule.instances.map(({ Instance }) => Instance?.phone ?? Instance?.id).join(", ")}</span>
+          <Button onClick={stopSchedule}>Pausar</Button>
+        </>
       ) : (
         <Form {...form}>
           <form onSubmit={form.handleSubmit(startSchedule)} class="space-y-4">
@@ -120,6 +137,132 @@ export default function Schedule() {
                 </FormItem>
               )}
             />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+              <FormField
+                control={form.control}
+                name="minTimeBetweenParticipants"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Delay mínimo entre cada envio</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        onChange={(event: { target: { value: string | number } }) => field.onChange(+event.target.value)}
+                        type="number"
+                        min="1"
+                        step="1"
+                        className="w-full"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="maxTimeBetweenParticipants"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Delay máximo entre cada envio</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        onChange={(event: { target: { value: string | number } }) => field.onChange(+event.target.value)}
+                        type="number"
+                        min="1"
+                        step="1"
+                        className="w-full"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+              <FormField
+                control={form.control}
+                name="minTimeBetweenMessages"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Delay mínimo entre mensagens</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        onChange={(event: { target: { value: string | number } }) => field.onChange(+event.target.value)}
+                        type="number"
+                        min="1"
+                        step="1"
+                        className="w-full"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="maxTimeBetweenMessages"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Delay máximo entre mensagens</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        onChange={(event: { target: { value: string | number } }) => field.onChange(+event.target.value)}
+                        type="number"
+                        min="1"
+                        step="1"
+                        className="w-full"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+              <FormField
+                control={form.control}
+                name="minTimeTyping"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tempo mínimo de digitação</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        onChange={(event: { target: { value: string | number } }) => field.onChange(+event.target.value)}
+                        type="number"
+                        min="1"
+                        step="1"
+                        className="w-full"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="maxTimeTyping"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tempo máximo de digitação</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        onChange={(event: { target: { value: string | number } }) => field.onChange(+event.target.value)}
+                        type="number"
+                        min="1"
+                        step="1"
+                        className="w-full"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
             <Button type="submit">Continuar</Button>
           </form>
         </Form>
