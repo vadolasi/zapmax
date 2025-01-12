@@ -9,7 +9,6 @@ import { logger } from "@grotto/logysia";
 import { Worker as BullMQWorker, Job, Queue } from "bullmq";
 import * as Minio from "minio";
 import { Readable } from "stream";
-import { msgpack } from "./msgpack";
 
 const minioClient = new Minio.Client({
   endPoint:"localhost",
@@ -44,7 +43,6 @@ for (const instance of savedInstances) {
 
 const app = new Elysia({ prefix: "/api" })
   .use(logger())
-  .use(msgpack({ moreTypes: true }))
   .group("/instances", (app) =>
     app
       .get("/", () => {

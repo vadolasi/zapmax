@@ -389,8 +389,7 @@ export default function CreateSchedule() {
                     </FormItem>
                   )}
                 />
-                {/*
-                {massageValues[index].file?.type.includes("audio") && massageValues[index].type === "media" && (
+                {massageValues[index].type === "media" && (
                   <FormField
                     control={form.control}
                     name={`messages.${index}.ppt`}
@@ -410,7 +409,6 @@ export default function CreateSchedule() {
                     )}
                   />
                 )}
-                  */}
                 {massageValues[index].type === "text" && (
                   <FormField
                     control={form.control}
