@@ -9,6 +9,16 @@ import { useAuthState } from "./auth";
 import EventEmitter from "events";
 import { PrismaClient } from "@prisma/client";
 import { Job, Queue, Worker } from "bullmq";
+import * as Minio from "minio";
+import { fileTypeFromStream } from "file-type";
+
+const minioClient = new Minio.Client({
+  endPoint: process.env.MINIO_ENDPOINT || "localhost",
+  port: process.env.NODE_ENV === "production" ? 443 : 9000,
+  useSSL: false,
+  accessKey: process.env.MINIO_ACCESS_KEY!,
+  secretKey: process.env.MINIO_SECRET_KEY!
+})
 
 const REDIS_URL = process.env.REDIS_URL!
 
@@ -78,7 +88,7 @@ export async function start() {
   })
 
   sock.ev.process(
-    async(events) => {
+    async (events) => {
       if (events["connection.update"]) {
         const update = events["connection.update"]
         const { connection, lastDisconnect, qr } = update
@@ -108,8 +118,8 @@ export async function start() {
       }
 
       if (events["creds.update"]) {
-				await saveCreds()
-			}
+        await saveCreds()
+      }
 
       if (events["messaging-history.set"]) {
         const { chats, isLatest } = events["messaging-history.set"]
@@ -126,33 +136,33 @@ export async function start() {
           ).map((i) => i.id);
 
           await tx.chat.createMany({
-						data: chats
-							.filter((chat) => !existingIds.includes(chat.id) && chat.name)
-							.map((chat) => ({ id: chat.id, instanceId: INSTANCE_ID, name: chat.name! })),
-					})
+            data: chats
+              .filter((chat) => !existingIds.includes(chat.id) && chat.name)
+              .map((chat) => ({ id: chat.id, instanceId: INSTANCE_ID, name: chat.name! })),
+          })
         })
       }
 
       if (events["chats.upsert"]) {
-         await prisma.$transaction(
+        await prisma.$transaction(
           events["chats.upsert"]
-          .filter(chat => chat.name && chat.id)
-          .map(chat => prisma.chat.upsert({
-            where: { id_instanceId: { id: chat.id, instanceId: INSTANCE_ID } },
-            create: { id: chat.id, name: chat.name!, instanceId: INSTANCE_ID },
-            update: { name: chat.name! }
-          }))
+            .filter(chat => chat.name && chat.id)
+            .map(chat => prisma.chat.upsert({
+              where: { id_instanceId: { id: chat.id, instanceId: INSTANCE_ID } },
+              create: { id: chat.id, name: chat.name!, instanceId: INSTANCE_ID },
+              update: { name: chat.name! }
+            }))
         )
       }
 
       if (events["chats.update"]) {
         await prisma.$transaction(
           events["chats.update"]
-          .filter(chat => chat.name && chat.id)
-          .map(chat => prisma.chat.update({
-            where: { id_instanceId: { id: chat.id!, instanceId: INSTANCE_ID } },
-            data: { name: chat.name!, id: chat.id }
-          }))
+            .filter(chat => chat.name && chat.id)
+            .map(chat => prisma.chat.update({
+              where: { id_instanceId: { id: chat.id!, instanceId: INSTANCE_ID } },
+              data: { name: chat.name!, id: chat.id }
+            }))
         )
       }
 
@@ -188,7 +198,7 @@ export async function start() {
 
 export async function sendMessage(
   jid: string,
-  messages: ({ type: "text", text: string } | { type: "media" })[],
+  messages: ({ type: "text", text: string, file: string } | { type: "media", file: string, ppt: boolean })[],
   minTimeBetweenMessages = 5000,
   maxTimeBetweenMessages = 10000,
   minTimeTyping = 1000,
@@ -199,16 +209,58 @@ export async function sendMessage(
 
   let i = 0;
   for (const message of messages) {
-    if (i > 0) {
-      await delay(Math.random() * (maxTimeBetweenMessages - minTimeBetweenMessages) + minTimeBetweenMessages)
-    }
-    await sock.sendPresenceUpdate("composing", jid)
-    await delay(Math.random() * (maxTimeTyping - minTimeTyping) + minTimeTyping)
-    await sock.sendPresenceUpdate("paused", jid)
-    switch (message.type) {
-      case "text":
+    if (message.type === "text") {
+      if (i > 0) {
+        await delay(Math.random() * (maxTimeBetweenMessages - minTimeBetweenMessages) + minTimeBetweenMessages)
+      }
+
+      await sock.sendPresenceUpdate("composing", jid)
+      await delay(Math.random() * (maxTimeTyping - minTimeTyping) + minTimeTyping)
+      await sock.sendPresenceUpdate("paused", jid)
+
+      if (message.file) {
+        const file = await minioClient.getObject("zapmax", message.file)
+        const fileType = await fileTypeFromStream(file)
+
+        if (!fileType) {
+          await sock.sendMessage(jid, { text: message.text })
+          continue
+        }
+
+        if (fileType.mime.startsWith("image")) {
+          await sock.sendMessage(jid, { caption: message.text, image: { stream: file }, mimetype: fileType.mime })
+        } else if (fileType.mime.startsWith("video")) {
+          await sock.sendMessage(jid, { caption: message.text, video: { stream: file }, mimetype: fileType.mime })
+        } else if (fileType.mime.startsWith("audio")) {
+          await sock.sendMessage(jid, { caption: message.text, audio: { stream: file }, mimetype: fileType.mime })
+        } else {
+          await sock.sendMessage(jid, { caption: message.text, document: { stream: file }, mimetype: fileType.mime })
+        }
+      } else {
         await sock.sendMessage(jid, { text: message.text })
-        break
+      }
+    } else if (message.type === "media") {
+      const file = await minioClient.getObject("zapmax", message.file)
+      const fileType = await fileTypeFromStream(file)
+
+      if (!fileType) {
+        continue
+      }
+
+      if (fileType.mime.startsWith("image")) {
+        await sock.sendMessage(jid, { image: { stream: file }, mimetype: fileType.mime })
+      } else if (fileType.mime.startsWith("video")) {
+        await sock.sendMessage(jid, { video: { stream: file }, mimetype: fileType.mime })
+      } else if (fileType.mime.startsWith("audio")) {
+        if (message.ppt) {
+          await sock.sendPresenceUpdate("recording", jid)
+          await delay((Math.random() * (maxTimeTyping - minTimeTyping) + minTimeTyping) * 2)
+          await sock.sendPresenceUpdate("paused", jid)
+        }
+        await sock.sendMessage(jid, { audio: { stream: file }, mimetype: fileType.mime, ptt: message.ppt })
+      } else {
+        await sock.sendMessage(jid, { document: { stream: file }, mimetype: fileType.mime })
+      }
     }
     i++
   }
@@ -269,6 +321,7 @@ new Worker(
         maxTimeTyping
       } = job.data
 
+      /*
       await sendMessage(
         jid,
         messages,
@@ -277,6 +330,7 @@ new Worker(
         minTimeTyping,
         maxTimeTyping
       )
+        */
       await prisma.job.update({
         where: { jid_schedulerId: { jid, schedulerId } },
         data: { sent: true }

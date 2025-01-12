@@ -4,12 +4,24 @@ import type Whatsapp from "./worker";
 import { Worker } from "worker_threads";
 import * as Comlink from "comlink";
 import nodeEndpoint from "comlink/dist/esm/node-adapter";
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { logger } from "@grotto/logysia";
-import { Worker as BullMQWorker, Job, FlowProducer, Queue } from "bullmq";
+import { Worker as BullMQWorker, Job, Queue } from "bullmq";
+import * as Minio from "minio";
+import { Readable } from "stream";
+import { msgpack } from "./msgpack";
+
+const minioClient = new Minio.Client({
+  endPoint: process.env.MINIO_ENDPOINT || "localhost",
+  port: process.env.NODE_ENV === "production" ? 443 : 9000,
+  useSSL: false,
+  accessKey: process.env.MINIO_ACCESS_KEY!,
+  secretKey: process.env.MINIO_SECRET_KEY!
+})
+
+const MINIO_BUCKET = process.env.MINIO_BUCKET!;
 
 const REDIS_URL = process.env.REDIS_URL!;
-const flow = new FlowProducer({ connection: { url: REDIS_URL } });
 
 const prisma = new PrismaClient();
 
@@ -32,6 +44,7 @@ for (const instance of savedInstances) {
 
 const app = new Elysia({ prefix: "/api" })
   .use(logger())
+  .use(msgpack({ moreTypes: true }))
   .group("/instances", (app) =>
     app
       .get("/", () => {
@@ -214,7 +227,7 @@ const app = new Elysia({ prefix: "/api" })
               }
             },
             jid: chatId,
-            messages,
+            messages: messages as Prisma.JsonArray,
             minTimeBetweenParticipants,
             maxTimeBetweenParticipants,
             minTimeBetweenMessages,
@@ -241,13 +254,11 @@ const app = new Elysia({ prefix: "/api" })
               t.Object({
                 type: t.Literal("text"),
                 text: t.String(),
-                mediaUrl: t.Optional(t.String()),
-                mediaMime: t.Optional(t.String())
+                file: t.Optional(t.String())
               }),
               t.Object({
                 type: t.Literal("media"),
-                url: t.String(),
-                mime: t.String(),
+                file: t.String(),
                 ppt: t.Optional(t.Boolean())
               }),
             ]),
@@ -415,6 +426,21 @@ const app = new Elysia({ prefix: "/api" })
         body: t.Object({ instances: t.Optional(t.Array(t.String())) })
       })
   )
+  .post("/upload", async ({ body }) => {
+    const file = body.file;
+
+    const fileStream = Readable.from(file.stream());
+
+    const fileName = `${randomUUIDv7()}.${file.name.split(".").pop()}`;
+
+    await minioClient.putObject(MINIO_BUCKET, fileName, fileStream);
+
+    return { file: fileName };
+  }, {
+    body: t.Object({
+      file: t.File()
+    })
+  })
   .listen(3000);
 
 export type App = typeof app;

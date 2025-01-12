@@ -19,13 +19,13 @@ services:
     command: redis-server --requirepass ${REDIS_PASSWORD}
 
   minio:
-    image: minio/minio
+    image: bitnami/minio
     volumes:
       - minio-data:/data
     environment:
       MINIO_ROOT_USER: ${MINIO_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD}
-    command: server /data --console-address :9001
+      MINIO_DEFAULT_BUCKETS: ${MINIO_BUCKET}
     ports:
       - 9000:9000
       - 9001:9001
@@ -44,7 +44,6 @@ services:
 
         mc alias set minio http://minio:9000 ${MINIO_USER} ${MINIO_PASSWORD}
         mc admin user svcacct add minio ${MINIO_USER} --access-key ${MINIO_ACCESS_KEY} --secret-key ${MINIO_SECRET_KEY}
-        mc mb minio/${MINIO_BUCKET}
 
 volumes:
   postgres-data:

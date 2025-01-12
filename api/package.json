@@ -15,6 +15,7 @@
     "comlink": "^4.4.2",
     "elysia": "latest",
     "elysia-helmet": "^2.0.0",
+    "file-type": "^19.6.0",
     "link-preview-js": "^3.0.13",
     "msgpackr": "^1.11.2",
     "pm2": "^5.4.3"

@@ -1,16 +1,8 @@
 import httpClient from "@/lib/httpClient"
 import { useMutation, useSuspenseQuery } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
-import { Check, ChevronsUpDown, Minus, Plus } from "lucide-react"
+import { Plus, Trash } from "lucide-react"
 import * as v from "valibot"
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command"
 import {
   Form,
   FormControl,
@@ -19,11 +11,6 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
 import { useFieldArray, useForm } from "react-hook-form"
 import { valibotResolver } from "@hookform/resolvers/valibot"
 import { toast } from "sonner"
@@ -39,12 +26,12 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { MultiSelect } from "@/components/ui/multi-select"
 import { useLocation } from "wouter-preact"
 import { Input } from "@/components/ui/input"
-import { cn } from "@/lib/utils"
+import { VirtualizedCombobox } from "@/components/ui/virtualized-combobox"
 
 const schema = v.object({
-  mainInstance: v.string(),
-  chatId: v.string(),
-  instances: v.array(v.string()),
+  mainInstance: v.pipe(v.string(), v.nonEmpty("Este campo é obrigatório")),
+  chatId: v.pipe(v.string(), v.nonEmpty("Este campo é obrigatório")),
+  instances: v.pipe(v.array(v.string()), v.minLength(1, "Adicione pelo menos uma instância")),
   blockAdms: v.boolean(),
   minTimeBetweenParticipants: v.pipe(v.number(), v.minValue(1)),
   maxTimeBetweenParticipants: v.pipe(v.number(), v.minValue(1)),
@@ -62,22 +49,12 @@ const schema = v.object({
             v.trim(),
             v.nonEmpty("Este campo é obrigatório")
           ),
-          mediaUrl: v.optional(v.string()),
-          mediaMime: v.optional(v.string())
+          file: v.optional(v.string()),
         }),
         v.object({
           type: v.literal("media"),
-          url: v.pipe(
-            v.string(),
-            v.trim(),
-            v.nonEmpty("Este campo é obrigatório")
-          ),
-          mime: v.pipe(
-            v.string(),
-            v.trim(),
-            v.nonEmpty("Este campo é obrigatório")
-          ),
-          ppt: v.optional(v.boolean())
+          file: v.string(),
+          ppt: v.boolean()
         })
       ])
     ),
@@ -95,8 +72,11 @@ export default function CreateSchedule() {
   })
 
   const { mutateAsync: send } = useMutation({
-    mutationFn: (data: FormData) =>
-      httpClient.api.schedulers.index.post(data)
+    mutationFn: (data: FormData) => httpClient.api.schedulers.index.post(data)
+  })
+
+  const { mutateAsync: uploadFile } = useMutation({
+    mutationFn: (file: File) => httpClient.api.upload.post({ file })
   })
 
   const form = useForm<FormData>({
@@ -104,6 +84,7 @@ export default function CreateSchedule() {
     mode: "onBlur",
     defaultValues: {
       mainInstance: instances?.[0]?.id,
+      chatId: "",
       instances: [],
       blockAdms: true,
       minTimeBetweenParticipants: 20,
@@ -112,7 +93,7 @@ export default function CreateSchedule() {
       maxTimeBetweenMessages: 10,
       minTimeTyping: 1,
       maxTimeTyping: 3,
-      messages: []
+      messages: [{ type: "text", text: "" }]
     }
   })
 
@@ -128,6 +109,8 @@ export default function CreateSchedule() {
     // @ts-ignore
     name: "messages"
   })
+
+  const massageValues = form.watch("messages")
 
   const onSubmit = (data: FormData) => {
     toast.promise(async () => {
@@ -153,11 +136,11 @@ export default function CreateSchedule() {
       <h1 class="text-2xl font-semibold tracking-tight text-center">Enviar mensagens</h1>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 w-full flex flex-col items-center">
-        <FormField
+          <FormField
             control={form.control}
-            name="chatId"
+            name="mainInstance"
             render={({ field }) => (
-              <FormItem>
+              <FormItem className="w-full">
                 <FormLabel>Instância para extração</FormLabel>
                 <FormControl>
                   <Select onValueChange={field.onChange} defaultValue={field.value}>
@@ -181,62 +164,18 @@ export default function CreateSchedule() {
             control={form.control}
             name="chatId"
             render={({ field }) => (
-              <FormItem>
+              <FormItem className="w-full">
                 <FormLabel>Chat para extração</FormLabel>
                 <br />
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <FormControl>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        className={cn(
-                          "w-[200px] justify-between",
-                          !field.value && "text-muted-foreground"
-                        )}
-                      >
-                        {field.value
-                          ? chats.find(
-                            (chat) => chat.id === field.value
-                          )?.name
-                          : "Selecione um chat"}
-                        <ChevronsUpDown className="opacity-50" />
-                      </Button>
-                    </FormControl>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[200px] p-0">
-                    <Command>
-                      <CommandInput
-                        placeholder="Pesquisar"
-                        className="h-9"
-                      />
-                      <CommandList>
-                        <CommandEmpty>Nenhum chat encontrado</CommandEmpty>
-                        <CommandGroup>
-                          {chats.map((chat) => (
-                            <CommandItem
-                              value={chat.name}
-                              key={chat.id}
-                              onSelect={() => {
-                                form.setValue("chatId", chat.id)
-                              }}
-                            >
-                              {chat.name}
-                              <Check
-                                className={cn(
-                                  "ml-auto",
-                                  chat.id === field.value
-                                    ? "opacity-100"
-                                    : "opacity-0"
-                                )}
-                              />
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
+                <FormControl>
+                  <VirtualizedCombobox
+                    width="100%"
+                    options={chats.map(chat => ({ value: chat.id, label: chat.name }))}
+                    value={field.value}
+                    onSelect={field.onChange}
+                    searchPlaceholder="Buscar chats..."
+                  />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
@@ -245,13 +184,14 @@ export default function CreateSchedule() {
             control={form.control}
             name="instances"
             render={({ field }) => (
-              <FormItem>
+              <FormItem className="w-full">
                 <FormLabel>Instâncias para envio</FormLabel>
                 <FormControl>
                   <MultiSelect
                     options={instances.map(instance => ({ label: instance.phone || instance.id, value: instance.id }))}
                     onValueChange={field.onChange}
                     defaultValue={field.value}
+                    placeholder="Selecione as instâncias"
                   />
                 </FormControl>
                 <FormMessage />
@@ -262,19 +202,21 @@ export default function CreateSchedule() {
             control={form.control}
             name="blockAdms"
             render={({ field }) => (
-              <FormItem>
+              <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 shadow w-full">
                 <FormControl>
                   <Checkbox
                     checked={field.value}
                     onCheckedChange={field.onChange}
                   />
                 </FormControl>
-                <FormLabel>Não enviar para administradores</FormLabel>
-                <FormMessage />
+                <div className="space-y-1 leading-none">
+                  <FormLabel>Não enviar para administradores</FormLabel>
+                  <FormMessage />
+                </div>
               </FormItem>
             )}
           />
-          <div className="grid grid-cols-2 gap-6 w-full">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
             <FormField
               control={form.control}
               name="minTimeBetweenParticipants"
@@ -284,7 +226,10 @@ export default function CreateSchedule() {
                   <FormControl>
                     <Input
                       {...field}
+                      onChange={(event: { target: { value: string | number } }) => field.onChange(+event.target.value)}
                       type="number"
+                      min="1"
+                      step="1"
                       className="w-full"
                     />
                   </FormControl>
@@ -301,7 +246,10 @@ export default function CreateSchedule() {
                   <FormControl>
                     <Input
                       {...field}
+                      onChange={(event: { target: { value: string | number } }) => field.onChange(+event.target.value)}
                       type="number"
+                      min="1"
+                      step="1"
                       className="w-full"
                     />
                   </FormControl>
@@ -310,7 +258,7 @@ export default function CreateSchedule() {
               )}
             />
           </div>
-          <div className="grid grid-cols-2 gap-6 w-full">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
             <FormField
               control={form.control}
               name="minTimeBetweenMessages"
@@ -320,7 +268,10 @@ export default function CreateSchedule() {
                   <FormControl>
                     <Input
                       {...field}
+                      onChange={(event: { target: { value: string | number } }) => field.onChange(+event.target.value)}
                       type="number"
+                      min="1"
+                      step="1"
                       className="w-full"
                     />
                   </FormControl>
@@ -337,7 +288,10 @@ export default function CreateSchedule() {
                   <FormControl>
                     <Input
                       {...field}
+                      onChange={(event: { target: { value: string | number } }) => field.onChange(+event.target.value)}
                       type="number"
+                      min="1"
+                      step="1"
                       className="w-full"
                     />
                   </FormControl>
@@ -346,7 +300,7 @@ export default function CreateSchedule() {
               )}
             />
           </div>
-          <div className="grid grid-cols-2 gap-6 w-full">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
             <FormField
               control={form.control}
               name="minTimeTyping"
@@ -356,7 +310,10 @@ export default function CreateSchedule() {
                   <FormControl>
                     <Input
                       {...field}
+                      onChange={(event: { target: { value: string | number } }) => field.onChange(+event.target.value)}
                       type="number"
+                      min="1"
+                      step="1"
                       className="w-full"
                     />
                   </FormControl>
@@ -373,7 +330,10 @@ export default function CreateSchedule() {
                   <FormControl>
                     <Input
                       {...field}
+                      onChange={(event: { target: { value: string | number } }) => field.onChange(+event.target.value)}
                       type="number"
+                      min="1"
+                      step="1"
                       className="w-full"
                     />
                   </FormControl>
@@ -385,24 +345,91 @@ export default function CreateSchedule() {
           <FormLabel>Mensagens</FormLabel>
           {messages.fields.map((message, index) => (
             <div className="flex items-center justify-center space-x-2 w-full" key={message.id}>
-              <FormField
-                key={message.id}
-                control={form.control}
-                name={`messages.${index}.text`}
-                render={({ field }) => (
-                  <FormItem className="flex flex-col w-full">
-                    <FormLabel>Mensagem {index + 1}</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        {...field}
-                        className="w-full"
-                        placeholder="Digite a mensagem"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
+              <div class="w-full space-y-4">
+                <FormField
+                  control={form.control}
+                  name={`messages.${index}.type`}
+                  render={({ field }) => (
+                    <FormItem className="flex flex-col w-full">
+                      <FormControl>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione o tipo de mensagem" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="text">Texto (opcionalmente atrelado a um arquivo)</SelectItem>
+                            <SelectItem value="media">Apenas mídia</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name={`messages.${index}.file`}
+                  render={({ field }) => (
+                    <FormItem className="flex flex-col w-full">
+                      <FormControl>
+                        <Input
+                          type="file"
+                          {...field}
+                          onChange={async (event: { target: { files: FileList | null } }) => {
+                            if (!event.target.files) return
+                            const file = event.target.files[0]
+                            const { data } = await uploadFile(file)
+                            if (data) {
+                              field.onChange(data.file)
+                            }
+                          }}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                {/*
+                {massageValues[index].file?.type.includes("audio") && massageValues[index].type === "media" && (
+                  <FormField
+                    control={form.control}
+                    name={`messages.${index}.ppt`}
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 shadow w-full">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                          <FormLabel>Enviar como audio gravado na hora</FormLabel>
+                          <FormMessage />
+                        </div>
+                      </FormItem>
+                    )}
+                  />
                 )}
-              />
+                  */}
+                {massageValues[index].type === "text" && (
+                  <FormField
+                    control={form.control}
+                    name={`messages.${index}.text`}
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col w-full">
+                        <FormControl>
+                          <Textarea
+                            {...field}
+                            className="w-full"
+                            placeholder="Digite a mensagem"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+              </div>
               <Button
                 onClick={() => {
                   messages.remove(index)
@@ -410,7 +437,7 @@ export default function CreateSchedule() {
                 size="icon"
                 type="button"
               >
-                <Minus />
+                <Trash />
               </Button>
             </div>
           ))}
@@ -424,7 +451,7 @@ export default function CreateSchedule() {
           >
             <Plus />
           </Button>
-          <Button type="submit">Enviar</Button>
+          <Button type="submit" disabled={!form.formState.isValid}>Enviar</Button>
         </form>
       </Form>
     </>
