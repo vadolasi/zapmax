@@ -199,23 +199,16 @@ export async function start() {
 export async function sendMessage(
   jid: string,
   messages: ({ type: "text", text: string, file: string } | { type: "media", file: string, ppt: boolean })[],
-  minTimeBetweenMessages = 5000,
-  maxTimeBetweenMessages = 10000,
-  minTimeTyping = 1000,
-  maxTimeTyping = 5000
+  minTimeTyping = 1,
+  maxTimeTyping = 5
 ) {
   await sock.presenceSubscribe(jid)
   await delay(Math.random() * 1000)
 
-  let i = 0;
   for (const message of messages) {
     if (message.type === "text") {
-      if (i > 0) {
-        await delay(Math.random() * (maxTimeBetweenMessages - minTimeBetweenMessages) + minTimeBetweenMessages)
-      }
-
       await sock.sendPresenceUpdate("composing", jid)
-      await delay(Math.random() * (maxTimeTyping - minTimeTyping) + minTimeTyping)
+      await delay(message.text.length * Math.random() * (maxTimeTyping - minTimeTyping) + minTimeTyping)
       await sock.sendPresenceUpdate("paused", jid)
 
       if (message.file) {
@@ -254,7 +247,7 @@ export async function sendMessage(
       } else if (fileType.mime.startsWith("audio")) {
         if (message.ppt) {
           await sock.sendPresenceUpdate("recording", jid)
-          await delay((Math.random() * (maxTimeTyping - minTimeTyping) + minTimeTyping) * 2)
+          await delay((Math.random() * (maxTimeTyping - minTimeTyping) + minTimeTyping) * 2000)
           await sock.sendPresenceUpdate("paused", jid)
         }
         await sock.sendMessage(jid, { audio: { stream: file }, mimetype: fileType.mime, ptt: message.ppt })
@@ -262,7 +255,6 @@ export async function sendMessage(
         await sock.sendMessage(jid, { document: { stream: file }, mimetype: fileType.mime })
       }
     }
-    i++
   }
 }
 
@@ -305,8 +297,6 @@ new Worker(
     jid: string,
     messages: any[],
     schedulerId: string,
-    minTimeBetweenMessages: number,
-    maxTimeBetweenMessages: number,
     minTimeTyping: number,
     maxTimeTyping: number
   }>) => {
@@ -315,8 +305,6 @@ new Worker(
         jid,
         messages,
         schedulerId,
-        minTimeBetweenMessages,
-        maxTimeBetweenMessages,
         minTimeTyping,
         maxTimeTyping
       } = job.data
@@ -324,8 +312,6 @@ new Worker(
       await sendMessage(
         jid,
         messages,
-        minTimeBetweenMessages,
-        maxTimeBetweenMessages,
         minTimeTyping,
         maxTimeTyping
       )

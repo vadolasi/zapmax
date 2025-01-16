@@ -55,8 +55,8 @@ model Scheduler {
   messages                   Json                 @db.Json
   minTimeBetweenParticipants Int
   maxTimeBetweenParticipants Int
-  minTimeBetweenMessages     Int
-  maxTimeBetweenMessages     Int
+  groupSize                  Int
+  groupDelay                 Int
   minTimeTyping              Int
   maxTimeTyping              Int
   jobs                       Job[]

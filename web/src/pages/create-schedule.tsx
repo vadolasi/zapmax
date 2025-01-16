@@ -1,5 +1,5 @@
 import httpClient from "@/lib/httpClient"
-import { useMutation, useSuspenseQuery } from "@tanstack/react-query"
+import { useMutation, useQuery, useSuspenseQuery } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
 import { Plus, Trash } from "lucide-react"
 import * as v from "valibot"
@@ -11,7 +11,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form"
-import { useFieldArray, useForm } from "react-hook-form"
+import { Control, useFieldArray, useForm, useFormContext, useFormState } from "react-hook-form"
 import { valibotResolver } from "@hookform/resolvers/valibot"
 import { toast } from "sonner"
 import { Textarea } from "@/components/ui/textarea"
@@ -27,6 +27,7 @@ import { MultiSelect } from "@/components/ui/multi-select"
 import { useLocation } from "wouter-preact"
 import { Input } from "@/components/ui/input"
 import { VirtualizedCombobox } from "@/components/ui/virtualized-combobox"
+import { useEffect } from "preact/hooks"
 
 const schema = v.object({
   mainInstance: v.pipe(v.string(), v.nonEmpty("Este campo é obrigatório")),
@@ -35,10 +36,10 @@ const schema = v.object({
   blockAdms: v.boolean(),
   minTimeBetweenParticipants: v.pipe(v.number(), v.minValue(1)),
   maxTimeBetweenParticipants: v.pipe(v.number(), v.minValue(1)),
-  minTimeBetweenMessages: v.pipe(v.number(), v.minValue(1)),
-  maxTimeBetweenMessages: v.pipe(v.number(), v.minValue(1)),
-  minTimeTyping: v.pipe(v.number(), v.minValue(1)),
-  maxTimeTyping: v.pipe(v.number(), v.minValue(1)),
+  groupSize: v.pipe(v.number(), v.minValue(1)),
+  groupDelay: v.pipe(v.number(), v.minValue(1)),
+  minTimeTyping: v.pipe(v.number(), v.minValue(0)),
+  maxTimeTyping: v.pipe(v.number(), v.minValue(0)),
   messages: v.pipe(
     v.array(
       v.union([
@@ -75,10 +76,6 @@ export default function CreateSchedule() {
     mutationFn: (data: FormData) => httpClient.api.schedulers.index.post(data)
   })
 
-  const { mutateAsync: uploadFile } = useMutation({
-    mutationFn: (file: File) => httpClient.api.upload.post({ file })
-  })
-
   const form = useForm<FormData>({
     resolver: valibotResolver(schema),
     mode: "onBlur",
@@ -89,8 +86,6 @@ export default function CreateSchedule() {
       blockAdms: true,
       minTimeBetweenParticipants: 20,
       maxTimeBetweenParticipants: 40,
-      minTimeBetweenMessages: 5,
-      maxTimeBetweenMessages: 10,
       minTimeTyping: 1,
       maxTimeTyping: 3,
       messages: [{ type: "text", text: "" }]
@@ -99,9 +94,10 @@ export default function CreateSchedule() {
 
   const instanceId = form.watch("mainInstance")
 
-  const { data: { data: chats } } = useSuspenseQuery({
+  const { data: chats } = useQuery({
     queryKey: ["chats", instanceId],
     queryFn: () => httpClient.api.instances({ id: instanceId }).chats.get(),
+    enabled: !!instanceId
   })
 
   const messages = useFieldArray({
@@ -160,26 +156,30 @@ export default function CreateSchedule() {
               </FormItem>
             )}
           />
-          <FormField
-            control={form.control}
-            name="chatId"
-            render={({ field }) => (
-              <FormItem className="w-full">
-                <FormLabel>Chat para extração</FormLabel>
-                <br />
-                <FormControl>
-                  <VirtualizedCombobox
-                    width="100%"
-                    options={chats.map(chat => ({ value: chat.id, label: chat.name }))}
-                    value={field.value}
-                    onSelect={field.onChange}
-                    searchPlaceholder="Buscar chats..."
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          {chats === undefined ? (
+            <div className="w-full">Carregando chats...</div>
+          ) : (
+            <FormField
+              control={form.control}
+              name="chatId"
+              render={({ field }) => (
+                <FormItem className="w-full">
+                  <FormLabel>Chat para extração</FormLabel>
+                  <br />
+                  <FormControl>
+                    <VirtualizedCombobox
+                      width="100%"
+                      options={chats.data?.map(chat => ({ value: chat.id, label: chat.name })) || []}
+                      value={field.value}
+                      onSelect={field.onChange}
+                      searchPlaceholder="Buscar chats..."
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
           <FormField
             control={form.control}
             name="instances"
@@ -222,7 +222,7 @@ export default function CreateSchedule() {
               name="minTimeBetweenParticipants"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Delay mínimo entre cada envio</FormLabel>
+                  <FormLabel>Delay mínimo entre cada número (s)</FormLabel>
                   <FormControl>
                     <Input
                       {...field}
@@ -242,7 +242,7 @@ export default function CreateSchedule() {
               name="maxTimeBetweenParticipants"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Delay máximo entre cada envio</FormLabel>
+                  <FormLabel>Delay máximo entre cada número (s)</FormLabel>
                   <FormControl>
                     <Input
                       {...field}
@@ -261,10 +261,10 @@ export default function CreateSchedule() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
             <FormField
               control={form.control}
-              name="minTimeBetweenMessages"
+              name="groupSize"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Delay mínimo entre mensagens</FormLabel>
+                  <FormLabel>Tamanho do grupo</FormLabel>
                   <FormControl>
                     <Input
                       {...field}
@@ -281,10 +281,10 @@ export default function CreateSchedule() {
             />
             <FormField
               control={form.control}
-              name="maxTimeBetweenMessages"
+              name="groupDelay"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Delay máximo entre mensagens</FormLabel>
+                  <FormLabel>Delay entre grupos (s)</FormLabel>
                   <FormControl>
                     <Input
                       {...field}
@@ -306,7 +306,7 @@ export default function CreateSchedule() {
               name="minTimeTyping"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Tempo mínimo de digitação</FormLabel>
+                  <FormLabel>Tempo mínimo de digitação por caracterer (ms)</FormLabel>
                   <FormControl>
                     <Input
                       {...field}
@@ -326,7 +326,7 @@ export default function CreateSchedule() {
               name="maxTimeTyping"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Tempo máximo de digitação</FormLabel>
+                  <FormLabel>Tempo máximo de digitação por caracterer (ms)</FormLabel>
                   <FormControl>
                     <Input
                       {...field}
@@ -344,100 +344,13 @@ export default function CreateSchedule() {
           </div>
           <FormLabel>Mensagens</FormLabel>
           {messages.fields.map((message, index) => (
-            <div className="flex items-center justify-center space-x-2 w-full" key={message.id}>
-              <div class="w-full space-y-4">
-                <FormField
-                  control={form.control}
-                  name={`messages.${index}.type`}
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col w-full">
-                      <FormControl>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione o tipo de mensagem" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="text">Texto (opcionalmente atrelado a um arquivo)</SelectItem>
-                            <SelectItem value="media">Apenas mídia</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name={`messages.${index}.file`}
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col w-full">
-                      <FormControl>
-                        <Input
-                          type="file"
-                          {...field}
-                          onChange={async (event: { target: { files: FileList | null } }) => {
-                            if (!event.target.files) return
-                            const file = event.target.files[0]
-                            const { data } = await uploadFile(file)
-                            if (data) {
-                              field.onChange(data.file)
-                            }
-                          }}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                {massageValues[index].type === "media" && (
-                  <FormField
-                    control={form.control}
-                    name={`messages.${index}.ppt`}
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 shadow w-full">
-                        <FormControl>
-                          <Checkbox
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
-                        </FormControl>
-                        <div className="space-y-1 leading-none">
-                          <FormLabel>Enviar como audio gravado na hora</FormLabel>
-                          <FormMessage />
-                        </div>
-                      </FormItem>
-                    )}
-                  />
-                )}
-                {massageValues[index].type === "text" && (
-                  <FormField
-                    control={form.control}
-                    name={`messages.${index}.text`}
-                    render={({ field }) => (
-                      <FormItem className="flex flex-col w-full">
-                        <FormControl>
-                          <Textarea
-                            {...field}
-                            className="w-full"
-                            placeholder="Digite a mensagem"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
-              </div>
-              <Button
-                onClick={() => {
-                  messages.remove(index)
-                }}
-                size="icon"
-                type="button"
-              >
-                <Trash />
-              </Button>
-            </div>
+            <MessageInput
+              key={message.id}
+              control={form.control}
+              index={index}
+              values={massageValues}
+              onDeleted={() => messages.remove(index)}
+            />
           ))}
           <Button
             onClick={() => {
@@ -452,6 +365,131 @@ export default function CreateSchedule() {
           <Button type="submit" disabled={!form.formState.isValid}>Enviar</Button>
         </form>
       </Form>
+    </>
+  )
+}
+
+function MessageInput({
+  control,
+  index,
+  values,
+  onDeleted
+}: {
+  control: Control<FormData>,
+  index: number,
+  values: FormData["messages"],
+  onDeleted: () => void
+}) {
+  const value = values[index]
+
+  const { setValue } = useFormContext()
+
+  useEffect(() => {
+    if (value.type === "media") {
+      setValue(`messages.${index}`, { type: "media", file: "", ppt: false })
+    } else {
+      setValue(`messages.${index}`, { type: "text", text: "" })
+    }
+  }, [value.type])
+
+  const { mutateAsync: uploadFile } = useMutation({
+    mutationFn: (file: File) => httpClient.api.upload.post({ file })
+  })
+
+  return (
+    <>
+      <div className="flex items-center justify-center space-x-2 w-full">
+        <div class="w-full space-y-4">
+          <FormField
+            control={control}
+            name={`messages.${index}.type`}
+            render={({ field }) => (
+              <FormItem className="flex flex-col w-full">
+                <FormControl>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o tipo de mensagem" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="text">Texto (opcionalmente atrelado a um arquivo)</SelectItem>
+                      <SelectItem value="media">Apenas mídia</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={control}
+            name={`messages.${index}.file`}
+            render={({ field }) => (
+              <FormItem className="flex flex-col w-full">
+                <FormControl>
+                  <Input
+                    type="file"
+                    {...field}
+                    onChange={async (event: { target: { files: FileList | null } }) => {
+                      if (!event.target.files) return
+                      const file = event.target.files[0]
+                      const { data } = await uploadFile(file)
+                      if (data) {
+                        field.onChange(data.file)
+                      }
+                    }}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          {value.type === "media" && (
+            <FormField
+              control={control}
+              name={`messages.${index}.ppt`}
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 shadow w-full">
+                  <FormControl>
+                    <Checkbox
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                  <div className="space-y-1 leading-none">
+                    <FormLabel>Enviar como audio gravado na hora</FormLabel>
+                    <FormMessage />
+                  </div>
+                </FormItem>
+              )}
+            />
+          )}
+          {value.type === "text" && (
+            <FormField
+              control={control}
+              name={`messages.${index}.text`}
+              render={({ field }) => (
+                <FormItem className="flex flex-col w-full">
+                  <FormControl>
+                    <Textarea
+                      {...field}
+                      className="w-full"
+                      placeholder="Digite a mensagem"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+        </div>
+        <Button
+          onClick={onDeleted}
+          size="icon"
+          type="button"
+        >
+          <Trash />
+        </Button>
+      </div>
     </>
   )
 }

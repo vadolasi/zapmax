@@ -136,8 +136,8 @@ const app = new Elysia({ prefix: "/api" })
           blockAdms = true,
           minTimeBetweenParticipants,
           maxTimeBetweenParticipants,
-          minTimeBetweenMessages,
-          maxTimeBetweenMessages,
+          groupSize,
+          groupDelay,
           minTimeTyping,
           maxTimeTyping
         } = body;
@@ -176,13 +176,17 @@ const app = new Elysia({ prefix: "/api" })
 
           const jobId = randomUUIDv7();
 
-          const delay = Math.floor(
-            Math.random() * (
-              maxTimeBetweenParticipants - minTimeBetweenParticipants + 1
-            )
-          ) + minTimeBetweenParticipants;
+          if (i % groupSize === 0) {
+            currentTime = currentTime + groupDelay * 1000;
+          } else {
+            const delay = Math.floor(
+              Math.random() * (
+                maxTimeBetweenParticipants - minTimeBetweenParticipants + 1
+              )
+            ) + minTimeBetweenParticipants;
 
-          currentTime = currentTime + delay * 1000;
+            currentTime = currentTime + delay * 1000;
+          }
 
           jobs[instanceId].push({
             instanceId,
@@ -203,8 +207,6 @@ const app = new Elysia({ prefix: "/api" })
               jid: job.jid,
               messages: job.messages,
               schedulerId,
-              minTimeBetweenMessages,
-              maxTimeBetweenMessages,
               minTimeTyping,
               maxTimeTyping
             },
@@ -228,8 +230,8 @@ const app = new Elysia({ prefix: "/api" })
             messages: messages as Prisma.JsonArray,
             minTimeBetweenParticipants,
             maxTimeBetweenParticipants,
-            minTimeBetweenMessages,
-            maxTimeBetweenMessages,
+            groupSize,
+            groupDelay,
             minTimeTyping,
             maxTimeTyping,
             jobs: {
@@ -266,8 +268,8 @@ const app = new Elysia({ prefix: "/api" })
           mainInstance: t.String(),
           minTimeBetweenParticipants: t.Number({ minimum: 1 }),
           maxTimeBetweenParticipants: t.Number({ minimum: 1 }),
-          minTimeBetweenMessages: t.Number({ minimum: 1 }),
-          maxTimeBetweenMessages: t.Number({ minimum: 1 }),
+          groupSize: t.Number({ minimum: 1 }),
+          groupDelay: t.Number({ minimum: 1 }),
           minTimeTyping: t.Number({ minimum: 1 }),
           maxTimeTyping: t.Number({ minimum: 1 }),
           blockAdms: t.Boolean()
@@ -314,8 +316,8 @@ const app = new Elysia({ prefix: "/api" })
           instances: instancesIds,
           minTimeBetweenParticipants,
           maxTimeBetweenParticipants,
-          minTimeBetweenMessages,
-          maxTimeBetweenMessages,
+          groupSize,
+          groupDelay,
           minTimeTyping,
           maxTimeTyping
         } = body;
@@ -392,21 +394,23 @@ const app = new Elysia({ prefix: "/api" })
 
           const queue = new Queue(`zapmax-${instanceId}`, { connection: { url: REDIS_URL } });
 
-          const delay = Math.floor(
-            Math.random() * (
-              scheduler.maxTimeBetweenParticipants - scheduler.minTimeBetweenParticipants + 1
-            )
-          ) + scheduler.minTimeBetweenParticipants;
-
-          currentTime = currentTime + delay * 1000;
+          if (i % groupSize === 0) {
+            currentTime = currentTime + groupDelay * 1000;
+          } else {
+            const delay = Math.floor(
+              Math.random() * (
+                maxTimeBetweenParticipants - minTimeBetweenParticipants + 1
+              )
+            ) + scheduler.minTimeBetweenParticipants;
+  
+            currentTime = currentTime + delay * 1000;
+          }
 
           await queue.add("send-messages",
             {
               jid: job.jid,
               schedulerId,
               messages: scheduler.messages,
-              minTimeBetweenMessages: minTimeBetweenMessages,
-              maxTimeBetweenMessages: maxTimeBetweenMessages,
               minTimeTyping: minTimeTyping,
               maxTimeTyping: maxTimeTyping
             },
@@ -423,7 +427,13 @@ const app = new Elysia({ prefix: "/api" })
             id: schedulerId
           },
           data: {
-            active: true
+            active: true,
+            minTimeBetweenParticipants,
+            maxTimeBetweenParticipants,
+            groupSize,
+            groupDelay,
+            minTimeTyping,
+            maxTimeTyping
           }
         });
 
@@ -433,11 +443,38 @@ const app = new Elysia({ prefix: "/api" })
           instances: t.Array(t.String()),
           minTimeBetweenParticipants: t.Number({ minimum: 1 }),
           maxTimeBetweenParticipants: t.Number({ minimum: 1 }),
-          minTimeBetweenMessages: t.Number({ minimum: 1 }),
-          maxTimeBetweenMessages: t.Number({ minimum: 1 }),
+          groupSize: t.Number({ minimum: 1 }),
+          groupDelay: t.Number({ minimum: 1 }),
           minTimeTyping: t.Number({ minimum: 1 }),
           maxTimeTyping: t.Number({ minimum: 1 }),
         })
+      })
+      .delete("/:id", async ({ params }) => {
+        const schedulerId = params.id;
+
+        const scheduler = await prisma.scheduler.findUnique({
+          where: { id: schedulerId },
+          include: {
+            jobs: true,
+            instances: true
+          }
+        });
+
+        if (!scheduler) {
+          return { error: "Scheduler not found" };
+        }
+
+        for (const instance of scheduler.instances) {
+          const queue = new Queue(`zapmax-${instance.instanceId}`, { connection: { url: REDIS_URL } });
+          await Promise.all(
+            scheduler.jobs
+              .map(async job => queue.remove(job.queueId!))
+          );
+        }
+
+        return prisma.scheduler.delete({
+          where: { id: schedulerId }
+        });
       })
   )
   .post("/upload", async ({ body }) => {
@@ -540,25 +577,26 @@ new BullMQWorker(
 
               const queue = new Queue(`zapmax-${instanceId}`, { connection: { url: REDIS_URL } });
 
-              const delay = Math.floor(
-                Math.random() * (
-                  scheduler.maxTimeBetweenParticipants - scheduler.minTimeBetweenParticipants + 1
-                )
-              ) + scheduler.minTimeBetweenParticipants;
+              if (i % scheduler.groupSize === 0) {
+                currentTime = currentTime + scheduler.groupDelay * 1000;
+              } else {
+                const delay = Math.floor(
+                  Math.random() * (
+                    scheduler.maxTimeBetweenParticipants - scheduler.minTimeBetweenParticipants + 1
+                  )
+                ) + scheduler.minTimeBetweenParticipants;
 
-              const time = currentTime + delay * 1000;
-              currentTime = time;
+                currentTime = currentTime + delay * 1000;
+              }
 
               await queue.add("send-messages", {
                 jid: job.jid,
                 messages: scheduler.messages,
-                minTimeBetweenMessages: scheduler.minTimeBetweenMessages,
-                maxTimeBetweenMessages: scheduler.maxTimeBetweenMessages,
                 minTimeTyping: scheduler.minTimeTyping,
                 maxTimeTyping: scheduler.maxTimeTyping
               },
                 {
-                  delay: time - Date.now(),
+                  delay: currentTime - Date.now(),
                   jobId: job.id,
                   removeOnComplete: true
                 });

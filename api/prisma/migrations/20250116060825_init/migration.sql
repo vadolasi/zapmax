@@ -45,8 +45,8 @@ CREATE TABLE "Scheduler" (
     "messages" JSON NOT NULL,
     "minTimeBetweenParticipants" INTEGER NOT NULL,
     "maxTimeBetweenParticipants" INTEGER NOT NULL,
-    "minTimeBetweenMessages" INTEGER NOT NULL,
-    "maxTimeBetweenMessages" INTEGER NOT NULL,
+    "groupSize" INTEGER NOT NULL,
+    "groupDelay" INTEGER NOT NULL,
     "minTimeTyping" INTEGER NOT NULL,
     "maxTimeTyping" INTEGER NOT NULL,
 
@@ -70,10 +70,10 @@ ALTER TABLE "Session" ADD CONSTRAINT "Session_instanceId_fkey" FOREIGN KEY ("ins
 ALTER TABLE "Chat" ADD CONSTRAINT "Chat_instanceId_fkey" FOREIGN KEY ("instanceId") REFERENCES "Instance"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Scheduler_Instance" ADD CONSTRAINT "Scheduler_Instance_instanceId_fkey" FOREIGN KEY ("instanceId") REFERENCES "Instance"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Scheduler_Instance" ADD CONSTRAINT "Scheduler_Instance_instanceId_fkey" FOREIGN KEY ("instanceId") REFERENCES "Instance"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Scheduler_Instance" ADD CONSTRAINT "Scheduler_Instance_schedulerId_fkey" FOREIGN KEY ("schedulerId") REFERENCES "Scheduler"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Scheduler_Instance" ADD CONSTRAINT "Scheduler_Instance_schedulerId_fkey" FOREIGN KEY ("schedulerId") REFERENCES "Scheduler"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Job" ADD CONSTRAINT "Job_schedulerId_fkey" FOREIGN KEY ("schedulerId") REFERENCES "Scheduler"("id") ON DELETE CASCADE ON UPDATE CASCADE;

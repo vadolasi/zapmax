@@ -5,7 +5,7 @@ import httpClient from "@/lib/httpClient";
 import { useMutation, useQueryClient, useSuspenseQueries } from "@tanstack/react-query";
 import { AlertCircle } from "lucide-react";
 import { toast } from "sonner";
-import { useParams } from "wouter-preact";
+import { useLocation, useParams } from "wouter-preact";
 import * as v from "valibot";
 import { useForm } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
@@ -17,8 +17,8 @@ const schema = v.object({
   instances: v.array(v.string()),
   minTimeBetweenParticipants: v.pipe(v.number(), v.minValue(1)),
   maxTimeBetweenParticipants: v.pipe(v.number(), v.minValue(1)),
-  minTimeBetweenMessages: v.pipe(v.number(), v.minValue(1)),
-  maxTimeBetweenMessages: v.pipe(v.number(), v.minValue(1)),
+  groupSize: v.pipe(v.number(), v.minValue(1)),
+  groupDelay: v.pipe(v.number(), v.minValue(1)),
   minTimeTyping: v.pipe(v.number(), v.minValue(1)),
   maxTimeTyping: v.pipe(v.number(), v.minValue(1)),
 })
@@ -27,6 +27,7 @@ type FormData = NonNullable<v.InferInput<typeof schema>>
 
 export default function Schedule() {
   const params = useParams()
+  const [, navigate] = useLocation()
   const scheduleId = params.id as string
 
   const [{ data: { data: schedule } }, { data: { data: instances } }] = useSuspenseQueries({
@@ -48,8 +49,8 @@ export default function Schedule() {
       instances: schedule?.instances.map(({ Instance }) => Instance!.id) || [],
       minTimeBetweenParticipants: schedule?.minTimeBetweenParticipants || 20,
       maxTimeBetweenParticipants: schedule?.maxTimeBetweenParticipants || 40,
-      minTimeBetweenMessages: schedule?.minTimeBetweenMessages || 5,
-      maxTimeBetweenMessages: schedule?.maxTimeBetweenMessages || 10,
+      groupSize: schedule?.groupSize || 10,
+      groupDelay: schedule?.groupDelay || 60,
       minTimeTyping: schedule?.minTimeTyping || 1,
       maxTimeTyping: schedule?.maxTimeTyping || 3,
     }
@@ -62,9 +63,24 @@ export default function Schedule() {
   const { mutateAsync: start } = useMutation({
     mutationFn: (data: FormData) => httpClient.api.schedulers({ id: scheduleId }).start.post({
       ...data,
-      instances: data.instances
+      instances: data.instances,
     }),
   })
+
+  const { mutateAsync: destroy } = useMutation({
+    mutationFn: () => httpClient.api.schedulers({ id: scheduleId }).delete(),
+  })
+
+  const deleteSchedule = async () => {
+    toast.promise(async () => {
+      await destroy()
+      navigate("/schedules")
+    }, {
+      loading: "Excluindo agendamento",
+      success: "Agendamento excluído com sucesso!",
+      error: "Ocorreu um erro ao excluir o agendamento!"
+    })
+  }
 
   const queryClient = useQueryClient()
 
@@ -143,7 +159,7 @@ export default function Schedule() {
                 name="minTimeBetweenParticipants"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Delay mínimo entre cada envio</FormLabel>
+                    <FormLabel>Delay mínimo entre cada número (s)</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
@@ -163,7 +179,7 @@ export default function Schedule() {
                 name="maxTimeBetweenParticipants"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Delay máximo entre cada envio</FormLabel>
+                    <FormLabel>Delay máximo entre cada número (s)</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
@@ -182,10 +198,10 @@ export default function Schedule() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
               <FormField
                 control={form.control}
-                name="minTimeBetweenMessages"
+                name="groupSize"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Delay mínimo entre mensagens</FormLabel>
+                    <FormLabel>Tamanho do grupo</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
@@ -202,10 +218,10 @@ export default function Schedule() {
               />
               <FormField
                 control={form.control}
-                name="maxTimeBetweenMessages"
+                name="groupDelay"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Delay máximo entre mensagens</FormLabel>
+                    <FormLabel>Delay entre grupos (s)</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
@@ -227,7 +243,7 @@ export default function Schedule() {
                 name="minTimeTyping"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Tempo mínimo de digitação</FormLabel>
+                    <FormLabel>Tempo mínimo de digitação por caracterer (ms)</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
@@ -247,7 +263,7 @@ export default function Schedule() {
                 name="maxTimeTyping"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Tempo máximo de digitação</FormLabel>
+                    <FormLabel>Tempo máximo de digitação por caracterer (ms)</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
@@ -267,6 +283,7 @@ export default function Schedule() {
           </form>
         </Form>
       )}
+      <Button onClick={deleteSchedule} variant="destructive">Excluir agendamento</Button>
     </>
   )
 }
