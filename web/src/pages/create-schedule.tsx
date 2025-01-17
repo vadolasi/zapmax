@@ -86,6 +86,8 @@ export default function CreateSchedule() {
       blockAdms: true,
       minTimeBetweenParticipants: 20,
       maxTimeBetweenParticipants: 40,
+      groupSize: 10,
+      groupDelay: 60,
       minTimeTyping: 1,
       maxTimeTyping: 3,
       messages: [{ type: "text", text: "" }]
@@ -264,7 +266,7 @@ export default function CreateSchedule() {
               name="groupSize"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Tamanho do grupo</FormLabel>
+                  <FormLabel>Tamanho do lote</FormLabel>
                   <FormControl>
                     <Input
                       {...field}
@@ -284,7 +286,7 @@ export default function CreateSchedule() {
               name="groupDelay"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Delay entre grupos (s)</FormLabel>
+                  <FormLabel>Delay entre lotes (s)</FormLabel>
                   <FormControl>
                     <Input
                       {...field}

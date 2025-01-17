@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button"
 import { Eye } from "lucide-react"
 import httpClient from "@/lib/httpClient"
-import { useSuspenseQueries, useSuspenseQuery } from "@tanstack/react-query"
+import { useSuspenseQuery } from "@tanstack/react-query"
 import { Link } from "wouter-preact"
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from "@tanstack/react-table"
 import {
@@ -46,12 +46,10 @@ export const columns: ColumnDef<{
   ]
 
 export default function Schedules() {
-  const [{ data: { data } }] = useSuspenseQueries({
-    queries: [{
-      queryKey: ["schedules"],
-      queryFn: () => httpClient.api.schedulers.index.get(),
-      refetchInterval: 5000
-    }]
+  const { data: { data } } = useSuspenseQuery({
+    queryKey: ["schedules"],
+    queryFn: () => httpClient.api.schedulers.index.get(),
+    refetchInterval: 5000
   })
 
   const table = useReactTable({

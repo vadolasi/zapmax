@@ -201,7 +201,7 @@ export default function Schedule() {
                 name="groupSize"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Tamanho do grupo</FormLabel>
+                    <FormLabel>Tamanho do lote</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
@@ -221,7 +221,7 @@ export default function Schedule() {
                 name="groupDelay"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Delay entre grupos (s)</FormLabel>
+                    <FormLabel>Delay entre lotes (s)</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
