@@ -3,7 +3,7 @@
   "module": "index.ts",
   "devDependencies": {
     "@types/bun": "latest",
-    "turbo": "^2.3.3"
+    "turbo": "^2.3.4"
   },
   "peerDependencies": {
     "typescript": "^5.7.2"
@@ -11,7 +11,8 @@
   "packageManager": "bun@1.1.42",
   "scripts": {
     "dev": "turbo dev",
-    "start": "turbo start"
+    "start": "turbo start",
+    "postinstall": "bun run build.ts"
   },
   "type": "module",
   "workspaces": [

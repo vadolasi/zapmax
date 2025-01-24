@@ -1,4 +1,4 @@
-import { proto, AuthenticationCreds, AuthenticationState, SignalDataTypeMap, initAuthCreds, BufferJSON } from "@whiskeysockets/baileys"
+import { proto, AuthenticationCreds, AuthenticationState, SignalDataTypeMap, initAuthCreds, BufferJSON } from "baileys"
 import { PrismaClient } from "@prisma/client"
 import { Packr } from "msgpackr";
 

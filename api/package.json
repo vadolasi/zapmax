@@ -10,8 +10,8 @@
   "dependencies": {
     "@grotto/logysia": "^0.1.6",
     "@prisma/client": "^6.2.1",
-    "@whiskeysockets/baileys": "^6.7.9",
-    "bullmq": "^5.34.8",
+    "baileys": "github:WhiskeySockets/Baileys",
+    "bullmq": "^5.36.0",
     "comlink": "^4.4.2",
     "elysia": "latest",
     "elysia-helmet": "^2.0.0",

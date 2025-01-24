@@ -1,6 +1,6 @@
 import { Boom } from "@hapi/boom"
 import NodeCache from "node-cache"
-import makeWASocket, { Browsers, delay, DisconnectReason, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, jidNormalizedUser, toNumber } from "@whiskeysockets/baileys"
+import makeWASocket, { Browsers, delay, DisconnectReason, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, jidNormalizedUser, toNumber } from "baileys"
 import P from "pino"
 import { parentPort } from "worker_threads";
 import * as Comlink from "comlink";
