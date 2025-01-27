@@ -10,7 +10,8 @@ import EventEmitter from "events";
 import { PrismaClient } from "@prisma/client";
 import { Job, Queue, Worker } from "bullmq";
 import * as Minio from "minio";
-import { fileTypeFromStream } from "file-type";
+import { fileTypeFromBuffer, fileTypeFromStream } from "file-type";
+import internal from "stream";
 
 const minioClient = new Minio.Client({
   endPoint: process.env.MINIO_ENDPOINT || "localhost",
@@ -196,6 +197,14 @@ export async function start() {
   )
 }
 
+async function readableToArrayBuffer(readable: internal.Readable) {
+  const chunks: Buffer[] = [];
+  for await (const chunk of readable) {
+    chunks.push(chunk);
+  }
+  return new Uint8Array(Buffer.concat(chunks.map(chunk => new Uint8Array(chunk))).buffer);
+}
+
 export async function sendMessage(
   jid: string,
   messages: ({ type: "text", text: string, file: string } | { type: "media", file: string, ppt: boolean })[],
@@ -213,7 +222,9 @@ export async function sendMessage(
 
       if (message.file) {
         const file = await minioClient.getObject("zapmax", message.file)
-        const fileType = await fileTypeFromStream(file)
+        const buffer = await readableToArrayBuffer(file)
+
+        const fileType = await fileTypeFromBuffer(buffer)
 
         if (!fileType) {
           await sock.sendMessage(jid, { text: message.text })
@@ -221,38 +232,40 @@ export async function sendMessage(
         }
 
         if (fileType.mime.startsWith("image")) {
-          await sock.sendMessage(jid, { caption: message.text, image: { stream: file }, mimetype: fileType.mime })
+          await sock.sendMessage(jid, { caption: message.text, image: Buffer.from(buffer), mimetype: fileType.mime })
         } else if (fileType.mime.startsWith("video")) {
-          await sock.sendMessage(jid, { caption: message.text, video: { stream: file }, mimetype: fileType.mime })
+          await sock.sendMessage(jid, { caption: message.text, video: Buffer.from(buffer), mimetype: fileType.mime })
         } else if (fileType.mime.startsWith("audio")) {
-          await sock.sendMessage(jid, { caption: message.text, audio: { stream: file }, mimetype: fileType.mime })
+          await sock.sendMessage(jid, { caption: message.text, audio: Buffer.from(buffer), mimetype: fileType.mime })
         } else {
-          await sock.sendMessage(jid, { caption: message.text, document: { stream: file }, mimetype: fileType.mime })
+          await sock.sendMessage(jid, { caption: message.text, document: Buffer.from(buffer), mimetype: fileType.mime })
         }
       } else {
         await sock.sendMessage(jid, { text: message.text })
       }
     } else if (message.type === "media") {
       const file = await minioClient.getObject("zapmax", message.file)
-      const fileType = await fileTypeFromStream(file)
+      const buffer = await readableToArrayBuffer(file)
+
+      const fileType = await fileTypeFromBuffer(buffer)
 
       if (!fileType) {
         continue
       }
 
       if (fileType.mime.startsWith("image")) {
-        await sock.sendMessage(jid, { image: { stream: file }, mimetype: fileType.mime })
+        await sock.sendMessage(jid, { image: Buffer.from(buffer), mimetype: fileType.mime })
       } else if (fileType.mime.startsWith("video")) {
-        await sock.sendMessage(jid, { video: { stream: file }, mimetype: fileType.mime })
+        await sock.sendMessage(jid, { video: Buffer.from(buffer), mimetype: fileType.mime })
       } else if (fileType.mime.startsWith("audio")) {
         if (message.ppt) {
           await sock.sendPresenceUpdate("recording", jid)
           await delay((Math.random() * (maxTimeTyping - minTimeTyping) + minTimeTyping) * 2000)
           await sock.sendPresenceUpdate("paused", jid)
         }
-        await sock.sendMessage(jid, { audio: { stream: file }, mimetype: fileType.mime, ptt: message.ppt })
+        await sock.sendMessage(jid, { audio: Buffer.from(buffer), mimetype: fileType.mime, ptt: message.ppt })
       } else {
-        await sock.sendMessage(jid, { document: { stream: file }, mimetype: fileType.mime })
+        await sock.sendMessage(jid, { document: Buffer.from(buffer), mimetype: fileType.mime })
       }
     }
   }
