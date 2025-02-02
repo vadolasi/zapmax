@@ -1,6 +1,6 @@
 import { Boom } from "@hapi/boom"
 import NodeCache from "node-cache"
-import makeWASocket, { Browsers, delay, DisconnectReason, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, jidNormalizedUser, toNumber } from "baileys"
+import makeWASocket, { Browsers, delay, DisconnectReason, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, jidNormalizedUser } from "@whiskeysockets/baileys"
 import P from "pino"
 import { parentPort } from "worker_threads";
 import * as Comlink from "comlink";
@@ -10,7 +10,7 @@ import EventEmitter from "events";
 import { PrismaClient } from "@prisma/client";
 import { Job, Queue, Worker } from "bullmq";
 import * as Minio from "minio";
-import { fileTypeFromBuffer, fileTypeFromStream } from "file-type";
+import { fileTypeFromBuffer } from "file-type";
 import internal from "stream";
 
 const minioClient = new Minio.Client({

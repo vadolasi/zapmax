@@ -11,8 +11,7 @@
   "packageManager": "bun@1.1.42",
   "scripts": {
     "dev": "turbo dev",
-    "start": "turbo start",
-    "postinstall": "bun run build.ts"
+    "start": "turbo start"
   },
   "type": "module",
   "workspaces": [
