@@ -151,7 +151,7 @@ const app = new Elysia({ prefix: "/api" })
         let participants = await whatsapp.fetchCommunityParticipants(chatId);
 
         if (blockAdms) {
-          participants = participants.filter((participant) => !participant.isAdmin && !participant.isSuperAdmin);
+          participants = participants.filter((participant) => !(participant.isAdmin || participant.isSuperAdmin || !!participant.admin));
         }
 
         const jobs: {
